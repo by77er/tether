@@ -1,0 +1,9 @@
+[package]
+name = "tether"
+version = "0.1.0"
+authors = ["by77er <39721110+by77er@users.noreply.github.com>"]
+edition = "2018"
+
+[dependencies]
+igd = "^0.11.0"
+clap = "^2.33.1"
