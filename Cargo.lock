@@ -62,6 +62,7 @@ dependencies = [
  "textwrap",
  "unicode-width",
  "vec_map",
+ "yaml-rust",
 ]
 
 [[package]]
@@ -219,7 +220,7 @@ checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
 
 [[package]]
 name = "tether"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "clap",
  "igd",
@@ -317,3 +318,9 @@ checksum = "77a607efe600db25447a8d9bab1f39217a82c4ba160b51b027d7c4f6053004df"
 dependencies = [
  "xml-rs",
 ]
+
+[[package]]
+name = "yaml-rust"
+version = "0.3.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e66366e18dc58b46801afbf2ca7661a9f59cc8c5962c29892b6039b4f86fa992"
