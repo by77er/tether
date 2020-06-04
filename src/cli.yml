@@ -15,37 +15,37 @@ subcommands:
     - print_ip:
         short: p
         long: print-ip
-        help: Print the internal and external addresses of the discovered NAT device
+        help: Also print the internal and external addresses of the discovered NAT device
 - add:
     about: Adds a UPNP port mapping
     args:
     - protocol:
         long: protocol
-        help: The protocol to use for this mapping. Valid values are TCP, UDP, and BOTH
+        help: The protocol to use. Valid values are TCP, UDP, and BOTH
         takes_value: true
         required: true
     - external_port:
         short: e
         long: external-port
-        help: Specifies the external port of the new mapping
+        help: The external port
         takes_value: true
         required: true
     - internal_port:
         short: p
         long: internal-port
-        help: Specifies the internal port of the new mapping
+        help: The internal port
         takes_value: true
         required: true
     - internal_host:
         short: i
         long: internal-host
-        help: Specifies the internal port of the new mapping
+        help: The internal host address
         takes_value: true
         required: true
     - lease_duration:
         short: l
         long: lease_duration
-        help: Specifies the length of the lease (Not supported by some routers)
+        help: The length of the lease (Not supported by some routers)
         takes_value: true
         required: false
     - description:
@@ -60,16 +60,13 @@ subcommands:
     - external_port:
         short: e
         long: external-port
-        help: Specifies the external port of the mapping to be removed
+        help: The external port of the mapping to be removed
         takes_value: true
     - protocol:
         long: protocol
-        help: Specifies the protocol of the mapping to be removed. Valid values are TCP, UDP, and BOTH
+        help: The protocol of the mapping to be removed. Valid values are TCP, UDP, and BOTH
         takes_value: true    
     - clear_all:
         short: a
         long: all
         help: Clears all existing UPNP port mappings
-    - debug:
-        short: d
-        help: print debug information

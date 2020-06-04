@@ -1,10 +1,12 @@
 use clap::{load_yaml, App, ArgMatches};
 use igd::{
-    search_gateway, Gateway, GetGenericPortMappingEntryError, PortMappingEntry,
-    PortMappingProtocol, SearchOptions,
+    Gateway, GetGenericPortMappingEntryError, PortMappingEntry, PortMappingProtocol, SearchOptions,
 };
 
+use PortMappingProtocol::*;
+
 use core::time::Duration;
+use net::SocketAddrV4;
 use std::net;
 use std::process;
 
@@ -12,7 +14,17 @@ fn main() {
     let yaml = load_yaml!("cli.yml");
     let args = App::from_yaml(yaml).get_matches();
 
-    // Let the user choose a comfortable timeout
+    // Dispatch the appropriate subroutine
+    match args.subcommand() {
+        ("view", Some(matches)) => view_branch(&matches),
+        ("add", Some(matches)) => add_branch(&matches),
+        ("remove", Some(matches)) => remove_branch(&matches),
+        _ => fail(args.usage()),
+    }
+}
+
+// Given a timeout, finds the gateway device
+fn get_gateway(args: &ArgMatches) -> igd::Gateway {
     let timeout: u64 = args
         .value_of("timeout")
         .unwrap_or("60")
@@ -23,61 +35,17 @@ fn main() {
         timeout: Some(Duration::from_secs(timeout)),
         ..Default::default()
     };
-
     // Scan the network for the gateway
-    let mut gateway =
-        search_gateway(options).unwrap_or_else(|_e| fail("Failed to find UPNP-enabled gateway."));
-
-    // Dispatch the appropriate subroutine
-    match args.subcommand() {
-        ("view", Some(matches)) => {
-            view(&gateway, &matches, true);
-        }
-        ("add", Some(matches)) => add(&mut gateway, &matches),
-        ("remove", Some(matches)) => remove(&mut gateway, &matches),
-        _ => fail(args.usage()),
-    }
+    igd::search_gateway(options).unwrap_or_else(|_e| fail("Failed to find UPNP-enabled gateway."))
 }
 
-// Supports the "view" subcommand functionality - "print" argument allows it to be used by other fns
-fn view(gateway: &Gateway, matches: &ArgMatches, print_enable: bool) -> Vec<PortMappingEntry> {
-    if matches.is_present("print_ip") {
-        let ip = &gateway
-            .get_external_ip()
-            .unwrap_or_else(|_e| fail("Failed to get external IP address."));
-        println!("Internal IP: {} | External IP: {}", &gateway.addr.ip(), ip);
-    }
-
-    if print_enable {
-        println!(
-            "{: <15} || {: <15} || {: <30} // {}",
-            "Remote Host", "External Port", "Internal Host", "Description"
-        );
-    }
-
+// Retrieves the mappings from the router
+fn get_current_mappings(gateway: &Gateway) -> Vec<PortMappingEntry> {
     let mut ports: Vec<PortMappingEntry> = Vec::new();
 
-    // Print out all port mapping entries
     for index in 0..u32::MAX {
         match gateway.get_generic_port_mapping_entry(index) {
             Ok(entry) => {
-                // Print port entry
-                if print_enable {
-                    println!(
-                        "{: <15} -> {: <15} -> {: <30} // {}",
-                        if entry.remote_host.len() > 0 {
-                            &entry.remote_host
-                        } else {
-                            "*"
-                        },
-                        format!("{}/{}", entry.external_port, entry.protocol),
-                        format!(
-                            "{}:{}/{}",
-                            entry.internal_client, entry.internal_port, entry.protocol
-                        ),
-                        entry.port_mapping_description
-                    );
-                }
                 ports.push(entry);
             }
             Err(error) => match error {
@@ -88,13 +56,42 @@ fn view(gateway: &Gateway, matches: &ArgMatches, print_enable: bool) -> Vec<Port
             },
         }
     }
-
     // Return mappings
     ports
 }
 
+// Supports the "view" subcommand functionality - "print" argument allows it to be used by other fns
+fn view_branch(matches: &ArgMatches) {
+    let gateway = get_gateway(&matches);
+    if matches.is_present("print_ip") {
+        let ip = &gateway
+            .get_external_ip()
+            .unwrap_or_else(|_e| fail("Failed to get external IP address."));
+        println!("Internal IP: {} | External IP: {}", &gateway.addr.ip(), ip);
+    }
+
+    let ports = get_current_mappings(&gateway);
+
+    println!(
+        "{: <15} || {: <15} || {: <25} // Description",
+        "Remote Host", "External Port", "Internal Host",
+    );
+
+    for port in ports {
+        let internal_combined = format!(
+            "{}/{}@{}",
+            port.internal_port, port.protocol, port.internal_client
+        );
+        let external_combined = format!("{}/{}", port.external_port, port.protocol);
+        println!(
+            "{: <15} -> {: <15} -> {: <25} // {}",
+            port.remote_host, external_combined, internal_combined, port.port_mapping_description
+        );
+    }
+}
+
 // Supports the "add" subcommand functionality
-fn add(mut gateway: &mut Gateway, matches: &ArgMatches) {
+fn add_branch(matches: &ArgMatches) {
     // So many arguments to match...
     let external_port: u16 = matches
         .value_of("external_port")
@@ -137,38 +134,39 @@ fn add(mut gateway: &mut Gateway, matches: &ArgMatches) {
     match proto_string.to_ascii_uppercase().as_str() {
         "UDP" => {
             add_port(
-                &mut gateway,
-                PortMappingProtocol::UDP,
+                &mut get_gateway(&matches),
+                UDP,
                 external_port,
-                net::SocketAddrV4::new(internal_host, internal_port),
+                SocketAddrV4::new(internal_host, internal_port),
                 lease_duration,
                 description,
             );
         }
         "TCP" => {
             add_port(
-                &mut gateway,
-                PortMappingProtocol::TCP,
+                &mut get_gateway(&matches),
+                TCP,
                 external_port,
-                net::SocketAddrV4::new(internal_host, internal_port),
+                SocketAddrV4::new(internal_host, internal_port),
                 lease_duration,
                 description,
             );
         }
         "BOTH" => {
+            let mut gateway = get_gateway(&matches);
             add_port(
                 &mut gateway,
-                PortMappingProtocol::UDP,
+                UDP,
                 external_port,
-                net::SocketAddrV4::new(internal_host, internal_port),
+                SocketAddrV4::new(internal_host, internal_port),
                 lease_duration,
                 description,
             );
             add_port(
                 &mut gateway,
-                PortMappingProtocol::TCP,
+                TCP,
                 external_port,
-                net::SocketAddrV4::new(internal_host, internal_port),
+                SocketAddrV4::new(internal_host, internal_port),
                 lease_duration,
                 description,
             );
@@ -177,6 +175,7 @@ fn add(mut gateway: &mut Gateway, matches: &ArgMatches) {
     }
 }
 
+// Adds the port mapping
 fn add_port(
     gateway: &mut Gateway,
     protocol: PortMappingProtocol,
@@ -203,12 +202,13 @@ fn add_port(
 }
 
 // Supports the "remove" subcommand functionality
-fn remove(mut gateway: &mut Gateway, matches: &ArgMatches) {
+fn remove_branch(matches: &ArgMatches) {
     // Clear case
     if matches.is_present("clear_all") {
-        let entries = view(&gateway, &matches, false);
+        let mut gateway = get_gateway(&matches);
+        let entries = get_current_mappings(&gateway);
         // Notify when nothing happens
-        if entries.len() == 0 {
+        if entries.is_empty() {
             println!("No mappings to delete.");
         }
         for entry in entries {
@@ -233,21 +233,24 @@ fn remove(mut gateway: &mut Gateway, matches: &ArgMatches) {
         Some(s) => s,
         None => fail("Please specify a protocol. TCP, UDP, and BOTH are valid."),
     };
+
     match proto_string.to_ascii_uppercase().as_str() {
         "UDP" => {
-            remove_port(&mut gateway, PortMappingProtocol::UDP, external_port);
+            remove_port(&mut get_gateway(&matches), UDP, external_port);
         }
         "TCP" => {
-            remove_port(&mut gateway, PortMappingProtocol::TCP, external_port);
+            remove_port(&mut get_gateway(&matches), TCP, external_port);
         }
         "BOTH" => {
-            remove_port(&mut gateway, PortMappingProtocol::UDP, external_port);
-            remove_port(&mut gateway, PortMappingProtocol::TCP, external_port);
+            let mut gateway = get_gateway(&matches);
+            remove_port(&mut gateway, UDP, external_port);
+            remove_port(&mut gateway, TCP, external_port);
         }
         _ => fail("Invalid protocol. TCP, UDP, and BOTH are valid."),
     }
 }
 
+// removes a port mapping
 fn remove_port(gateway: &mut Gateway, protocol: PortMappingProtocol, external_port: u16) {
     match gateway.remove_port(protocol, external_port) {
         // Removed, yay
@@ -259,6 +262,6 @@ fn remove_port(gateway: &mut Gateway, protocol: PortMappingProtocol, external_po
 
 // Prints an error message and exits
 fn fail(message: &str) -> ! {
-    println!("{}", message);
+    eprintln!("{}", message);
     process::exit(1);
 }
