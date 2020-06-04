@@ -1,5 +1,5 @@
 name: tether
-version: "1.0.0"
+version: "1.0.5"
 author: by77er@github
 about: A scriptable tool for easy NAT port forwarding via UPNP
 args:
